@@ -1,8 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import { useRouter } from "next/navigation";
-import { RefreshCw, Save } from "lucide-react";
+import { useActionState, useEffect } from "react";
+import { Save } from "lucide-react";
 import { createItemAction, updateItemAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionState, Item } from "@/lib/types";
+import { useCacheDebugAction } from "@/app/cache-debug";
 
 const initialState: ActionState = { ok: false, message: "" };
 
@@ -30,9 +30,13 @@ type ItemFormProps = {
 };
 
 export function ItemForm({ item }: ItemFormProps) {
-  const router = useRouter();
   const action = item ? updateItemAction.bind(null, item.id) : createItemAction;
   const [state, formAction, pending] = useActionState(action, initialState);
+  const reportAction = useCacheDebugAction();
+
+  useEffect(() => {
+    if (state.debug) reportAction?.(state.debug);
+  }, [reportAction, state.debug]);
 
   return (
     <Card className="bg-card/90 backdrop-blur">
@@ -106,14 +110,10 @@ export function ItemForm({ item }: ItemFormProps) {
             </div>
           ) : null}
 
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <div>
             <Button type="submit" disabled={pending} className="shadow-sm">
               <Save className="size-4" />
               {pending ? "Đang lưu..." : item ? "Cập nhật" : "Tạo mới"}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => router.refresh()}>
-              <RefreshCw className="size-4" />
-              Refresh
             </Button>
           </div>
         </form>

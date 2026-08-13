@@ -1,11 +1,11 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { redirect } from "next/navigation";
 import {
   createItem,
   deleteItem,
-  ITEMS_CACHE_TAG,
+  getItemCacheTag,
+  ITEMS_LIST_CACHE_TAG,
   updateItem,
 } from "@/lib/items-store";
 import type { ActionState, Item } from "@/lib/types";
@@ -34,17 +34,29 @@ export async function createItemAction(
   const { data, errors } = parseItemForm(formData);
 
   if (Object.keys(errors).length > 0) {
-    return { ok: false, message: "Vui lòng kiểm tra dữ liệu.", errors };
+    return {
+      ok: false,
+      message: "Vui lòng kiểm tra dữ liệu.",
+      errors,
+      debug: { operation: "create", outcome: "validation" },
+    };
   }
 
   try {
-    await createItem(data);
-    updateTag(ITEMS_CACHE_TAG);
+    const item = await createItem(data);
+    updateTag(ITEMS_LIST_CACHE_TAG);
+    return {
+      ok: true,
+      message: "Đã tạo item mới.",
+      debug: { operation: "create", outcome: "mongodb", itemId: item.id },
+    };
   } catch {
-    return { ok: false, message: "Không thể tạo item. Vui lòng thử lại." };
+    return {
+      ok: false,
+      message: "Không thể tạo item. Vui lòng thử lại.",
+      debug: { operation: "create", outcome: "database-error" },
+    };
   }
-
-  return { ok: true, message: "Đã tạo item mới." };
 }
 
 export async function updateItemAction(
@@ -55,29 +67,66 @@ export async function updateItemAction(
   const { data, errors } = parseItemForm(formData);
 
   if (Object.keys(errors).length > 0) {
-    return { ok: false, message: "Vui lòng kiểm tra dữ liệu.", errors };
+    return {
+      ok: false,
+      message: "Vui lòng kiểm tra dữ liệu.",
+      errors,
+      debug: { operation: "update", outcome: "validation", itemId: id },
+    };
   }
 
   let item;
   try {
     item = await updateItem(id, data);
-    updateTag(ITEMS_CACHE_TAG);
+    updateTag(ITEMS_LIST_CACHE_TAG);
+    updateTag(getItemCacheTag(id));
   } catch {
-    return { ok: false, message: "Không thể cập nhật item. Vui lòng thử lại." };
+    return {
+      ok: false,
+      message: "Không thể cập nhật item. Vui lòng thử lại.",
+      debug: { operation: "update", outcome: "database-error", itemId: id },
+    };
   }
 
-  if (!item) return { ok: false, message: "Không tìm thấy item." };
+  if (!item) {
+    return {
+      ok: false,
+      message: "Không tìm thấy item.",
+      debug: { operation: "update", outcome: "not-found", itemId: id },
+    };
+  }
 
-  return { ok: true, message: "Đã cập nhật item." };
+  return {
+    ok: true,
+    message: "Đã cập nhật item.",
+    debug: { operation: "update", outcome: "mongodb", itemId: id },
+  };
 }
 
-export async function deleteItemAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
+export async function deleteItemAction(
+  id: string,
+): Promise<ActionState> {
   try {
-    await deleteItem(id);
-    updateTag(ITEMS_CACHE_TAG);
+    const deleted = await deleteItem(id);
+    if (!deleted) {
+      return {
+        ok: false,
+        message: "Không tìm thấy item.",
+        debug: { operation: "delete", outcome: "not-found", itemId: id },
+      };
+    }
+    updateTag(ITEMS_LIST_CACHE_TAG);
+    updateTag(getItemCacheTag(id));
+    return {
+      ok: true,
+      message: "Đã xóa item.",
+      debug: { operation: "delete", outcome: "mongodb", itemId: id },
+    };
   } catch {
-    redirect("/");
+    return {
+      ok: false,
+      message: "Không thể xóa item. Vui lòng thử lại.",
+      debug: { operation: "delete", outcome: "database-error", itemId: id },
+    };
   }
-  redirect("/");
 }

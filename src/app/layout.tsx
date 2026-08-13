@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { Suspense } from "react";
+import { CacheDebugProvider } from "@/app/cache-debug";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,7 +22,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="vi" className={`${inter.variable} ${jetBrainsMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <Suspense fallback={null}>
+          <CacheDebugProvider>{children}</CacheDebugProvider>
+        </Suspense>
+      </body>
     </html>
   );
 }

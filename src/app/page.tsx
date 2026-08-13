@@ -1,40 +1,30 @@
-import Link from "next/link";
-import { ArrowUpRight, CheckCircle2, Clock3, RefreshCw } from "lucide-react";
-import { deleteItemAction } from "@/app/actions";
+import { Suspense } from "react";
+import { CacheDebugTrace } from "@/app/cache-debug";
 import { ItemForm } from "@/app/item-form";
-import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { getItems } from "@/lib/items-store";
+import { ItemsSection } from "@/app/items-section";
+import { Card, CardContent } from "@/components/ui/card";
+import { searchItems } from "@/lib/items-store";
 import { cn } from "@/lib/utils";
 
-const statusLabels = {
-  todo: "Todo",
-  doing: "Doing",
-  done: "Done",
-};
+export default function Home(props: PageProps<"/">) {
+  return (
+    <Suspense fallback={<DashboardFallback />}>
+      <Dashboard searchParams={props.searchParams} />
+    </Suspense>
+  );
+}
 
-const statusMeta = {
-  todo: { variant: "secondary", icon: Clock3, className: "bg-red-100 text-red-800" },
-  doing: { variant: "outline", icon: RefreshCw, className: "border-amber-200 bg-amber-100 text-amber-800" },
-  done: { variant: "default", icon: CheckCircle2, className: "bg-emerald-600 text-white" },
-} as const;
-
-export default async function Home() {
-  const items = await getItems();
-  const total = items.length;
+async function Dashboard({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
+  const { q } = await searchParams;
+  const query = typeof q === "string" ? q.trim() : "";
+  const { data: items, trace } = await searchItems(query);
   const done = items.filter((item) => item.status === "done").length;
   const doing = items.filter((item) => item.status === "doing").length;
   const todo = items.filter((item) => item.status === "todo").length;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,color-mix(in_oklch,var(--accent)_38%,transparent),transparent_34rem),radial-gradient(circle_at_top_right,color-mix(in_oklch,var(--primary)_18%,transparent),transparent_30rem),linear-gradient(180deg,var(--background),var(--muted))]">
+      <CacheDebugTrace trace={trace} />
       <div className="border-b bg-background/70 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -56,73 +46,7 @@ export default async function Home() {
         <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
           <ItemForm />
         </aside>
-
-        <section className="space-y-6" aria-labelledby="items-heading">
-          <Card className="bg-card/90 backdrop-blur">
-            <CardHeader>
-              <CardTitle id="items-heading" className="text-2xl font-semibold tracking-tight">
-                Items
-              </CardTitle>
-              <CardAction>
-                <Badge variant="secondary">{total} bản ghi</Badge>
-              </CardAction>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {items.length === 0 ? (
-                <EmptyState />
-              ) : (
-                items.map((item) => {
-                  const StatusIcon = statusMeta[item.status].icon;
-
-                  return (
-                    <article
-                      key={item.id}
-                      className="group rounded-xl bg-muted/40 p-4 transition-colors hover:bg-muted/70"
-                    >
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 space-y-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant={statusMeta[item.status].variant} className={cn("gap-1.5", statusMeta[item.status].className)}>
-                              <StatusIcon className="size-3.5" />
-                              {statusLabels[item.status]}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {new Date(item.updatedAt).toLocaleString("vi-VN")}
-                            </span>
-                          </div>
-                          <div className="space-y-1">
-                            <h3 className="text-lg font-semibold tracking-tight">
-                              {item.title}
-                            </h3>
-                            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                              {item.description}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 gap-2">
-                          <Link
-                            href={`/items/${item.id}`}
-                            prefetch
-                            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-                          >
-                            Sửa
-                            <ArrowUpRight className="size-3.5" />
-                          </Link>
-                          <form action={deleteItemAction}>
-                            <input type="hidden" name="id" value={item.id} />
-                            <Button type="submit" variant="destructive" size="sm">
-                              Xóa
-                            </Button>
-                          </form>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })
-              )}
-            </CardContent>
-          </Card>
-        </section>
+        <ItemsSection items={items} query={query} />
       </div>
     </main>
   );
@@ -153,13 +77,6 @@ function Metric({
   );
 }
 
-function EmptyState() {
-  return (
-    <div className="rounded-xl bg-muted/40 px-6 py-12 text-center">
-      <h3 className="text-lg font-semibold tracking-tight">Chưa có item nào</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        Tạo item đầu tiên bằng form bên trái.
-      </p>
-    </div>
-  );
+function DashboardFallback() {
+  return <main className="min-h-screen bg-muted" aria-busy="true" />;
 }
