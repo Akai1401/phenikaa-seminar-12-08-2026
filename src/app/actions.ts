@@ -37,8 +37,12 @@ export async function createItemAction(
     return { ok: false, message: "Vui lòng kiểm tra dữ liệu.", errors };
   }
 
-  await createItem(data);
-  updateTag(ITEMS_CACHE_TAG);
+  try {
+    await createItem(data);
+    updateTag(ITEMS_CACHE_TAG);
+  } catch {
+    return { ok: false, message: "Không thể tạo item. Vui lòng thử lại." };
+  }
 
   return { ok: true, message: "Đã tạo item mới." };
 }
@@ -54,17 +58,26 @@ export async function updateItemAction(
     return { ok: false, message: "Vui lòng kiểm tra dữ liệu.", errors };
   }
 
-  const item = await updateItem(id, data);
-  if (!item) return { ok: false, message: "Không tìm thấy item." };
+  let item;
+  try {
+    item = await updateItem(id, data);
+    updateTag(ITEMS_CACHE_TAG);
+  } catch {
+    return { ok: false, message: "Không thể cập nhật item. Vui lòng thử lại." };
+  }
 
-  updateTag(ITEMS_CACHE_TAG);
+  if (!item) return { ok: false, message: "Không tìm thấy item." };
 
   return { ok: true, message: "Đã cập nhật item." };
 }
 
 export async function deleteItemAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
-  await deleteItem(id);
-  updateTag(ITEMS_CACHE_TAG);
+  try {
+    await deleteItem(id);
+    updateTag(ITEMS_CACHE_TAG);
+  } catch {
+    redirect("/");
+  }
   redirect("/");
 }

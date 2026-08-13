@@ -1,11 +1,14 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { cacheLife, cacheTag } from "next/cache";
 import type { Item } from "@/lib/types";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const DATA_FILE = path.join(DATA_DIR, "items.json");
+const DATA_FILE = path.join(process.cwd(), "data", "items.json");
 export const ITEMS_CACHE_TAG = "items";
+
+declare global {
+  var __phenikaaItems: Item[] | undefined;
+}
 
 const seedItems: Item[] = [
   {
@@ -37,25 +40,25 @@ const seedItems: Item[] = [
   },
 ];
 
-async function ensureDataFile() {
-  await mkdir(DATA_DIR, { recursive: true });
-
+async function loadInitialItems() {
   try {
-    await readFile(DATA_FILE, "utf8");
+    const content = await readFile(DATA_FILE, "utf8");
+    return JSON.parse(content) as Item[];
   } catch {
-    await writeFile(DATA_FILE, JSON.stringify(seedItems, null, 2));
+    return seedItems;
   }
 }
 
-async function readItemsFromDisk(): Promise<Item[]> {
-  await ensureDataFile();
-  const content = await readFile(DATA_FILE, "utf8");
-  return JSON.parse(content) as Item[];
+async function getMutableItems() {
+  if (!globalThis.__phenikaaItems) {
+    globalThis.__phenikaaItems = await loadInitialItems();
+  }
+
+  return globalThis.__phenikaaItems;
 }
 
-async function writeItemsToDisk(items: Item[]) {
-  await ensureDataFile();
-  await writeFile(DATA_FILE, JSON.stringify(items, null, 2));
+async function replaceItems(items: Item[]) {
+  globalThis.__phenikaaItems = items;
 }
 
 export async function getItems() {
@@ -63,7 +66,7 @@ export async function getItems() {
   cacheLife("minutes");
   cacheTag(ITEMS_CACHE_TAG);
 
-  const items = await readItemsFromDisk();
+  const items = await getMutableItems();
   return items.toSorted((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt),
   );
@@ -74,22 +77,22 @@ export async function getItem(id: string) {
   cacheLife("minutes");
   cacheTag(ITEMS_CACHE_TAG);
 
-  const items = await readItemsFromDisk();
+  const items = await getMutableItems();
   return items.find((item) => item.id === id) ?? null;
 }
 
 export async function getItemIds() {
-  const items = await readItemsFromDisk();
+  const items = await getMutableItems();
   return items.map((item) => ({ id: item.id }));
 }
 
 export async function createItem(input: Pick<Item, "title" | "description" | "status">) {
-  const items = await readItemsFromDisk();
+  const items = await getMutableItems();
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   const item: Item = { id, ...input, createdAt: now, updatedAt: now };
 
-  await writeItemsToDisk([item, ...items]);
+  await replaceItems([item, ...items]);
   return item;
 }
 
@@ -97,7 +100,7 @@ export async function updateItem(
   id: string,
   input: Pick<Item, "title" | "description" | "status">,
 ) {
-  const items = await readItemsFromDisk();
+  const items = await getMutableItems();
   const now = new Date().toISOString();
   let updatedItem: Item | null = null;
 
@@ -109,16 +112,16 @@ export async function updateItem(
 
   if (!updatedItem) return null;
 
-  await writeItemsToDisk(nextItems);
+  await replaceItems(nextItems);
   return updatedItem;
 }
 
 export async function deleteItem(id: string) {
-  const items = await readItemsFromDisk();
+  const items = await getMutableItems();
   const nextItems = items.filter((item) => item.id !== id);
 
   if (nextItems.length === items.length) return false;
 
-  await writeItemsToDisk(nextItems);
+  await replaceItems(nextItems);
   return true;
 }
